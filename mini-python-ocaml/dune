@@ -1,0 +1,10 @@
+(ocamllex
+ (modules lexer))
+
+(menhir
+ (modules parser))
+
+(executable
+ (name minipython)
+ (promote (until-clean))
+ (flags ()))
