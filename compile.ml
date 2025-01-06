@@ -85,14 +85,23 @@ let rec compile_stmt = function
             leaq (lab "true_str") rdi ++
             movq (imm 0) !%rax ++
             call "printf"
+        | TEbinop (Band, _, _) | TEbinop (Bor, _, _)
         | TEbinop (Beq, _, _) | TEbinop (Bneq, _, _) | TEbinop (Blt, _, _) 
         | TEbinop (Ble, _, _) | TEbinop (Bgt, _, _) | TEbinop (Bge, _, _) ->
+            let false_label = new_label () in
+            let end_label = new_label () in
             compile_expr e ++
             testq !%rax !%rax ++
-            jz "false_str" ++
+            jz false_label ++
             leaq (lab "true_str") rdi ++
             movq (imm 0) !%rax ++
-            call "printf"
+            call "printf" ++
+            jmp end_label ++
+            X86_64.label false_label ++
+            leaq (lab "false_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf" ++
+            X86_64.label end_label
         | TEcst (Cbool false) ->
             leaq (lab "false_str") rdi ++
             movq (imm 0) !%rax ++

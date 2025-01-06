@@ -4,18 +4,44 @@ main:
 main:
 	pushq %rbp
 	movq %rsp, %rbp
-	movq $2, %rax
-	pushq %rax
-	movq $1, %rax
-	popq %rbx
-	cmpq %rbx, %rax
-	setl %al
-	movzbq %al, %rax
-	testq %rax, %rax
-	jz false_str
 	leaq true_str, %rdi
 	movq $0, %rax
 	call printf
+	leaq false_str, %rdi
+	movq $0, %rax
+	call printf
+	movq $0, %rax
+	pushq %rax
+	movq $1, %rax
+	popq %rbx
+	andq %rbx, %rax
+	testq %rax, %rax
+	jz L0
+	leaq true_str, %rdi
+	movq $0, %rax
+	call printf
+	jmp L1
+L0:
+	leaq false_str, %rdi
+	movq $0, %rax
+	call printf
+L1:
+	movq $0, %rax
+	pushq %rax
+	movq $1, %rax
+	popq %rbx
+	orq %rbx, %rax
+	testq %rax, %rax
+	jz L2
+	leaq true_str, %rdi
+	movq $0, %rax
+	call printf
+	jmp L3
+L2:
+	leaq false_str, %rdi
+	movq $0, %rax
+	call printf
+L3:
 	movl $0, %eax
 	popq %rbp
 	ret
