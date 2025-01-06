@@ -6,4 +6,23 @@
 資工三 111590004 張意昌
 資工三 111590028 張睿恩
 
-# 希望我做的完
+# 啟動方法
+
+```
+make clean
+make
+./minipython.exe
+```
+
+# 關於Test
+
+老師給的方法是
+```
+test -2 <path_to_your_compiler>
+```
+
+但後來我們自己是用
+
+```
+bash test -2 <path_to_your_compiler>
+```
