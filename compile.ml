@@ -29,7 +29,7 @@ let rec compile_expr = function
       popq rbx ++
       (match op with
        | Badd -> addq !%rbx !%rax
-       | Bsub -> subq !%rbx !%rax
+       | Bsub -> subq !%rax !%rbx ++ movq !%rbx !%rax
        | Bmul -> imulq !%rbx !%rax
        | Bdiv -> cqto ++ idivq !%rbx
        | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax
