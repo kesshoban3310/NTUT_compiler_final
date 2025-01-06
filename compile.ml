@@ -26,6 +26,14 @@ let rec compile_expr = function
   | TEvar v -> movq (ind ~ofs:v.v_ofs rbp) !%rax
   | TEbinop (op, lhs, rhs) ->
       (match lhs, rhs with
+       | TEcst (Cstring s1), TEcst (Cstring s2) ->
+           let lbl1 = new_label () in
+           let lbl2 = new_label () in
+           string_constants := (lbl1, s1) :: (lbl2, s2) :: !string_constants;
+           leaq (lab lbl2) rsi ++
+           leaq (lab lbl1) rdi ++
+           movq (imm 0) !%rax ++
+           call "strcat"
        | TEcst (Cint _), TEcst (Cstring _)
        | TEcst (Cstring _), TEcst (Cint _) ->
            failwith "Type error: cannot add integer and string"
@@ -74,6 +82,12 @@ let rec compile_stmt = function
   | TSassign (v, e) -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp)
   | TSprint e -> 
       (match e with
+        | TEbinop (Badd, TEcst (Cstring _), TEcst (Cstring _)) ->
+            compile_expr e ++
+            movq !%rax !%rsi ++
+            leaq (lab "fmt_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf"
         | TEcst (Cstring s) ->
             let lbl = new_label () in
             string_constants := (lbl, s) :: !string_constants;
@@ -84,7 +98,7 @@ let rec compile_stmt = function
         | TEcst (Cbool true) ->
             leaq (lab "true_str") rdi ++
             movq (imm 0) !%rax ++
-            call "printf"
+            call "printf"          
         | TEbinop (Band, _, _) | TEbinop (Bor, _, _)
         | TEbinop (Beq, _, _) | TEbinop (Bneq, _, _) | TEbinop (Blt, _, _) 
         | TEbinop (Ble, _, _) | TEbinop (Bgt, _, _) | TEbinop (Bge, _, _) ->
