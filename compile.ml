@@ -66,6 +66,13 @@ let rec compile_expr = function
   | TErange _ -> failwith "Range is not supported in code generation"
   | TEget _ -> failwith "Get is not supported in code generation"
 
+(* Define a table to store variable names and their types *)
+let var_table = Hashtbl.create 10
+
+(* Function to record variable name and type *)
+let record_var_name var_name var_type =
+  Hashtbl.replace var_table var_name var_type
+
 let rec compile_stmt = function
   | TSif (cond, then_branch, else_branch) ->
       let else_label = new_label () in
@@ -79,53 +86,72 @@ let rec compile_stmt = function
       compile_stmt else_branch ++
       X86_64.label end_label
   | TSreturn e -> compile_expr e ++ ret
-  | TSassign (v, e) -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp)
+  | TSassign (v, e) -> 
+      (* Record the variable name and type *)
+      record_var_name v.v_name "string";
+      (match e with
+       | TEcst (Cstring s) ->
+           let lbl = new_label () in
+           string_constants := (lbl, s) :: !string_constants;
+           leaq (lab lbl) rax ++
+           movq !%rax (ind ~ofs:v.v_ofs rbp)
+       | _ -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp))
   | TSprint e -> 
       (match e with
-        | TEbinop (Badd, TEcst (Cstring _), TEcst (Cstring _)) ->
-            compile_expr e ++
-            movq !%rax !%rsi ++
-            leaq (lab "fmt_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf"
-        | TEcst (Cstring s) ->
-            let lbl = new_label () in
-            string_constants := (lbl, s) :: !string_constants;
-            leaq (lab lbl) rsi ++
-            leaq (lab "fmt_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf"
-        | TEcst (Cbool true) ->
-            leaq (lab "true_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf"          
-        | TEbinop (Band, _, _) | TEbinop (Bor, _, _)
-        | TEbinop (Beq, _, _) | TEbinop (Bneq, _, _) | TEbinop (Blt, _, _) 
-        | TEbinop (Ble, _, _) | TEbinop (Bgt, _, _) | TEbinop (Bge, _, _) ->
-            let false_label = new_label () in
-            let end_label = new_label () in
-            compile_expr e ++
-            testq !%rax !%rax ++
-            jz false_label ++
-            leaq (lab "true_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf" ++
-            jmp end_label ++
-            X86_64.label false_label ++
-            leaq (lab "false_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf" ++
-            X86_64.label end_label
-        | TEcst (Cbool false) ->
-            leaq (lab "false_str") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf"
-        | _ ->
-            compile_expr e ++
-            movq !%rax !%rsi ++
-            leaq (lab "fmt_int") rdi ++
-            movq (imm 0) !%rax ++
-            call "printf")
+       | TEvar v ->
+           (match Hashtbl.find_opt var_table v.v_name with
+            | Some "string" ->
+                compile_expr e ++
+                movq !%rax !%rsi ++
+                leaq (lab "fmt_str") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf"
+            | _ -> compile_expr e ++ call "print_other")
+       | TEbinop (Badd, TEcst (Cstring _), TEcst (Cstring _)) ->
+           compile_expr e ++
+           movq !%rax !%rsi ++
+           leaq (lab "fmt_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf"
+       | TEcst (Cstring s) ->
+           let lbl = new_label () in
+           string_constants := (lbl, s) :: !string_constants;
+           leaq (lab lbl) rax ++
+           movq !%rax !%rsi ++
+           leaq (lab "fmt_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf"
+       | TEcst (Cbool true) ->
+           leaq (lab "true_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf"          
+       | TEbinop (Band, _, _) | TEbinop (Bor, _, _)
+       | TEbinop (Beq, _, _) | TEbinop (Bneq, _, _) | TEbinop (Blt, _, _) 
+       | TEbinop (Ble, _, _) | TEbinop (Bgt, _, _) | TEbinop (Bge, _, _) ->
+           let false_label = new_label () in
+           let end_label = new_label () in
+           compile_expr e ++
+           testq !%rax !%rax ++
+           jz false_label ++
+           leaq (lab "true_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf" ++
+           jmp end_label ++
+           X86_64.label false_label ++
+           leaq (lab "false_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf" ++
+           X86_64.label end_label
+       | TEcst (Cbool false) ->
+           leaq (lab "false_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf"
+       | _ ->
+           compile_expr e ++
+           movq !%rax !%rsi ++
+           leaq (lab "fmt_int") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf")
   | TSblock stmts -> List.fold_left (++) nop (List.map compile_stmt stmts)
   | TSfor _ -> failwith "For loops are not supported in code generation"
   | TSeval e -> compile_expr e

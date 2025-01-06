@@ -4,10 +4,9 @@ main:
 main:
 	pushq %rbp
 	movq %rsp, %rbp
-	leaq L1, %rsi
-	leaq L0, %rdi
-	movq $0, %rax
-	call strcat
+	leaq L0, %rax
+	movq %rax, 0(%rbp)
+	movq 0(%rbp), %rax
 	movq %rax, %rsi
 	leaq fmt_str, %rdi
 	movq $0, %rax
@@ -18,8 +17,6 @@ main:
 	.data
 L0:
 	.string "foo"
-L1:
-	.string "bar"
 fmt_int:
 	.string "%d\n"
 fmt_str:

@@ -1,1 +1,2 @@
-print("foo" + "bar")
+x = "foo"
+print(x)
