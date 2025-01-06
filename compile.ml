@@ -34,24 +34,29 @@ let rec compile_expr = function
        | _ -> movq (imm64 (compile_constant c)) !%rax)
   | TEvar v -> movq (ind ~ofs:v.v_ofs rbp) !%rax
   | TEbinop (op, lhs, rhs) ->
-      compile_expr lhs ++
-      pushq !%rax ++
-      compile_expr rhs ++
-      popq rbx ++
-      (match op with
-       | Badd -> addq !%rbx !%rax
-       | Bsub -> subq !%rax !%rbx ++ movq !%rbx !%rax
-       | Bmul -> imulq !%rbx !%rax
-       | Bdiv -> cqto ++ idivq !%rbx
-       | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax
-       | Beq -> cmpq !%rbx !%rax ++ sete !%al ++ movzbq !%al rax
-       | Bneq -> cmpq !%rbx !%rax ++ setne !%al ++ movzbq !%al rax
-       | Blt -> cmpq !%rbx !%rax ++ setl !%al ++ movzbq !%al rax
-       | Ble -> cmpq !%rbx !%rax ++ setle !%al ++ movzbq !%al rax
-       | Bgt -> cmpq !%rbx !%rax ++ setg !%al ++ movzbq !%al rax
-       | Bge -> cmpq !%rbx !%rax ++ setge !%al ++ movzbq !%al rax
-       | Band -> andq !%rbx !%rax
-       | Bor -> orq !%rbx !%rax)
+      (match lhs, rhs with
+       | TEcst (Cint _), TEcst (Cstring _)
+       | TEcst (Cstring _), TEcst (Cint _) ->
+           failwith "Type error: cannot add integer and string"
+       | _ ->
+           compile_expr lhs ++
+           pushq !%rax ++
+           compile_expr rhs ++
+           popq rbx ++
+           (match op with
+            | Badd -> addq !%rbx !%rax
+            | Bsub -> subq !%rax !%rbx ++ movq !%rbx !%rax
+            | Bmul -> imulq !%rbx !%rax
+            | Bdiv -> cqto ++ idivq !%rbx
+            | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax
+            | Beq -> cmpq !%rbx !%rax ++ sete !%al ++ movzbq !%al rax
+            | Bneq -> cmpq !%rbx !%rax ++ setne !%al ++ movzbq !%al rax
+            | Blt -> cmpq !%rbx !%rax ++ setl !%al ++ movzbq !%al rax
+            | Ble -> cmpq !%rbx !%rax ++ setle !%al ++ movzbq !%al rax
+            | Bgt -> cmpq !%rbx !%rax ++ setg !%al ++ movzbq !%al rax
+            | Bge -> cmpq !%rbx !%rax ++ setge !%al ++ movzbq !%al rax
+            | Band -> andq !%rbx !%rax
+            | Bor -> orq !%rbx !%rax))
   | TEunop (Uneg, e) -> compile_expr e ++ negq !%rax
   | TEunop (Unot, e) -> compile_expr e ++ notq !%rax
   | TEcall (fn, args) ->
