@@ -6,12 +6,14 @@ main:
 	movq %rsp, %rbp
 	movq $2, %rax
 	pushq %rax
-	movq $17, %rax
+	movq $1, %rax
 	popq %rbx
-	cqto
-	idivq %rbx
-	movq %rax, %rsi
-	leaq fmt_int, %rdi
+	cmpq %rbx, %rax
+	setl %al
+	movzbq %al, %rax
+	testq %rax, %rax
+	jz false_str
+	leaq true_str, %rdi
 	movq $0, %rax
 	call printf
 	movl $0, %eax
@@ -22,3 +24,7 @@ fmt_int:
 	.string "%d\n"
 fmt_str:
 	.string "%s\n"
+true_str:
+	.string "True\n"
+false_str:
+	.string "False\n"

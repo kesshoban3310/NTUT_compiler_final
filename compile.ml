@@ -18,20 +18,11 @@ let compile_constant = function
   | Cnone -> 0L
   | Cbool true -> 1L
   | Cbool false -> 0L
-  | Cstring s -> 
-      let lbl = new_label () in
-      string_constants := (lbl, s) :: !string_constants;
-      Int64.of_int (Hashtbl.hash lbl)
+  | Cstring s -> 1L
   | Cint i -> i
 
 let rec compile_expr = function
-  | TEcst c -> 
-      (match c with
-       | Cstring s -> 
-           let lbl = new_label () in
-           string_constants := (lbl, s) :: !string_constants;
-           leaq (lab lbl) rax
-       | _ -> movq (imm64 (compile_constant c)) !%rax)
+  | TEcst c -> movq (imm64 (compile_constant c)) !%rax
   | TEvar v -> movq (ind ~ofs:v.v_ofs rbp) !%rax
   | TEbinop (op, lhs, rhs) ->
       (match lhs, rhs with
@@ -83,19 +74,35 @@ let rec compile_stmt = function
   | TSassign (v, e) -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp)
   | TSprint e -> 
       (match e with
-       | TEcst (Cstring s) ->
-           let lbl = new_label () in
-           string_constants := (lbl, s) :: !string_constants;
-           leaq (lab lbl) rsi ++
-           leaq (lab "fmt_str") rdi ++
-           movq (imm 0) !%rax ++
-           call "printf"
-       | _ ->
-           compile_expr e ++
-           movq !%rax !%rsi ++
-           leaq (lab "fmt_int") rdi ++
-           movq (imm 0) !%rax ++
-           call "printf")
+        | TEcst (Cstring s) ->
+            let lbl = new_label () in
+            string_constants := (lbl, s) :: !string_constants;
+            leaq (lab lbl) rsi ++
+            leaq (lab "fmt_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf"
+        | TEcst (Cbool true) ->
+            leaq (lab "true_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf"
+        | TEbinop (Beq, _, _) | TEbinop (Bneq, _, _) | TEbinop (Blt, _, _) 
+        | TEbinop (Ble, _, _) | TEbinop (Bgt, _, _) | TEbinop (Bge, _, _) ->
+            compile_expr e ++
+            testq !%rax !%rax ++
+            jz "false_str" ++
+            leaq (lab "true_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf"
+        | TEcst (Cbool false) ->
+            leaq (lab "false_str") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf"
+        | _ ->
+            compile_expr e ++
+            movq !%rax !%rsi ++
+            leaq (lab "fmt_int") rdi ++
+            movq (imm 0) !%rax ++
+            call "printf")
   | TSblock stmts -> List.fold_left (++) nop (List.map compile_stmt stmts)
   | TSfor _ -> failwith "For loops are not supported in code generation"
   | TSeval e -> compile_expr e
@@ -121,5 +128,10 @@ let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
     X86_64.label "fmt_int" ++
     string "%d\n" ++
     X86_64.label "fmt_str" ++
-    string "%s\n" in
+    string "%s\n" ++
+    X86_64.label "true_str" ++
+    string "True\n" ++
+    X86_64.label "false_str" ++
+    string "False\n"
+    in
   { text = text_section; data = data_section }
