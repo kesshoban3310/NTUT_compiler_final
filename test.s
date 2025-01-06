@@ -4,9 +4,21 @@ main:
 main:
 	pushq %rbp
 	movq %rsp, %rbp
-	movq $123, %rax
+	subq $16, %rsp
+	movq $1, %rax
+	movq %rax, -8(%rbp)
+	movq $2, %rax
+	movq %rax, -16(%rbp)
+	addq $16, %rsp
 	movq %rax, 0(%rbp)
+	movq $0, %rax
+	movq %rax, %rbx
+	addq $1, %rbx
 	movq 0(%rbp), %rax
+	movq %rsp, %rcx
+	imulq $8, %rbx
+	subq %rbx, %rcx
+	movq 0(%rcx), %rax
 	movq %rax, %rsi
 	leaq fmt_int, %rdi
 	movq $0, %rax

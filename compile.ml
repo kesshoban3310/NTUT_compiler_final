@@ -62,9 +62,25 @@ let rec compile_expr = function
       List.fold_right (fun arg code -> compile_expr arg ++ pushq !%rax ++ code) args nop ++
       call fn.fn_name ++
       addq (imm (8 * List.length args)) !%rsp
-  | TElist _ -> failwith "Lists are not supported in code generation"
+  | TElist elements -> 
+      let num_elements = List.length elements in
+      let allocate_space = subq (imm (8 * num_elements)) !%rsp in
+      let deallocate_space = addq (imm (8 * num_elements)) !%rsp in
+      let compile_element (code, offset) elem =
+        code ++ compile_expr elem ++ movq !%rax (ind ~ofs:offset rbp), offset - 8
+      in
+      let code, _ = List.fold_left compile_element (nop, -8) elements in
+      allocate_space ++ code ++ deallocate_space
   | TErange _ -> failwith "Range is not supported in code generation"
-  | TEget _ -> failwith "Get is not supported in code generation"
+  | TEget (list_expr, index_expr) ->
+      compile_expr index_expr ++
+      movq !%rax !%rbx ++  (* Save index in rbx *)
+      addq (imm 1) !%rbx ++  (* Increment index by 1 *)
+      compile_expr list_expr ++
+      movq !%rsp !%rcx ++  (* Save base address of list in rcx *)
+      imulq (imm 8) !%rbx ++  (* Multiply index by 8 (size of each element) *)
+      subq !%rbx !%rcx ++  (* Add offset to base address *)
+      movq (ind ~ofs:0 rcx) !%rax  (* Load the element into rax *)
 
 (* Define a table to store variable names and their types *)
 let var_table = Hashtbl.create 10

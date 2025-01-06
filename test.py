@@ -1,2 +1,2 @@
-x = 123
-print(x)
+row = [1, 2]
+print(row[0])
