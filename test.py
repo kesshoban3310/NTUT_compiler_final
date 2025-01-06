@@ -1,2 +1,2 @@
-x = "foo"
+x = 123
 print(x)

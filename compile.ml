@@ -88,9 +88,9 @@ let rec compile_stmt = function
   | TSreturn e -> compile_expr e ++ ret
   | TSassign (v, e) -> 
       (* Record the variable name and type *)
-      record_var_name v.v_name "string";
       (match e with
        | TEcst (Cstring s) ->
+           record_var_name v.v_name "string";
            let lbl = new_label () in
            string_constants := (lbl, s) :: !string_constants;
            leaq (lab lbl) rax ++
@@ -106,7 +106,12 @@ let rec compile_stmt = function
                 leaq (lab "fmt_str") rdi ++
                 movq (imm 0) !%rax ++
                 call "printf"
-            | _ -> compile_expr e ++ call "print_other")
+            | _ -> 
+                compile_expr e ++
+                movq !%rax !%rsi ++
+                leaq (lab "fmt_int") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf")
        | TEbinop (Badd, TEcst (Cstring _), TEcst (Cstring _)) ->
            compile_expr e ++
            movq !%rax !%rsi ++
