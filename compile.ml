@@ -12,15 +12,26 @@ let new_label () =
   incr label_counter;
   label
 
+let string_constants = ref []
+
 let compile_constant = function
   | Cnone -> 0L
   | Cbool true -> 1L
   | Cbool false -> 0L
-  | Cstring _ -> failwith "Strings are not supported in code generation"
+  | Cstring s -> 
+      let lbl = new_label () in
+      string_constants := (lbl, s) :: !string_constants;
+      Int64.of_int (Hashtbl.hash lbl)
   | Cint i -> i
 
 let rec compile_expr = function
-  | TEcst c -> movq (imm64 (compile_constant c)) !%rax
+  | TEcst c -> 
+      (match c with
+       | Cstring s -> 
+           let lbl = new_label () in
+           string_constants := (lbl, s) :: !string_constants;
+           leaq (lab lbl) rax
+       | _ -> movq (imm64 (compile_constant c)) !%rax)
   | TEvar v -> movq (ind ~ofs:v.v_ofs rbp) !%rax
   | TEbinop (op, lhs, rhs) ->
       compile_expr lhs ++
@@ -60,24 +71,33 @@ let rec compile_stmt = function
       jz else_label ++
       compile_stmt then_branch ++
       jmp end_label ++
-      label else_label ++
+      X86_64.label else_label ++
       compile_stmt else_branch ++
-      label end_label
+      X86_64.label end_label
   | TSreturn e -> compile_expr e ++ ret
   | TSassign (v, e) -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp)
   | TSprint e -> 
-    compile_expr e ++
-    movq !%rax !%rsi ++
-    leaq (lab "fmt") rdi ++
-    movq (imm 0) !%rax ++
-    call "printf"
+      (match e with
+       | TEcst (Cstring s) ->
+           let lbl = new_label () in
+           string_constants := (lbl, s) :: !string_constants;
+           leaq (lab lbl) rsi ++
+           leaq (lab "fmt_str") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf"
+       | _ ->
+           compile_expr e ++
+           movq !%rax !%rsi ++
+           leaq (lab "fmt_int") rdi ++
+           movq (imm 0) !%rax ++
+           call "printf")
   | TSblock stmts -> List.fold_left (++) nop (List.map compile_stmt stmts)
   | TSfor _ -> failwith "For loops are not supported in code generation"
   | TSeval e -> compile_expr e
   | TSset _ -> failwith "Set is not supported in code generation"
 
 let compile_def (fn, body) =
-  label fn.fn_name ++
+  X86_64.label fn.fn_name ++
   pushq !%rbp ++
   movq !%rsp !%rbp ++
   compile_stmt body ++
@@ -87,10 +107,14 @@ let compile_def (fn, body) =
 
 let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
   debug := b;
-  { text = 
-      globl "main" ++ 
-      label "main" ++ 
-      List.fold_left (++) nop (List.map compile_def p);
-    data = 
-      label "fmt" ++
-      string "%d\n" }
+  let text_section = 
+    globl "main" ++ 
+    X86_64.label "main" ++ 
+    List.fold_left (++) nop (List.map compile_def p) in
+  let data_section = 
+    List.fold_left (fun acc (lbl, str) -> acc ++ X86_64.label lbl ++ string str) nop !string_constants ++
+    X86_64.label "fmt_int" ++
+    string "%d\n" ++
+    X86_64.label "fmt_str" ++
+    string "%s\n" in
+  { text = text_section; data = data_section }

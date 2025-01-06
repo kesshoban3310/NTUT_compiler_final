@@ -1,2 +1,1 @@
-
-print(123-321)
+print("Hello, World!")
