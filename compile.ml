@@ -81,6 +81,7 @@ let compile_def (fn, body) =
   pushq !%rbp ++
   movq !%rsp !%rbp ++
   compile_stmt body ++
+  movl (imm 0) !%eax ++
   popq rbp ++
   ret
 

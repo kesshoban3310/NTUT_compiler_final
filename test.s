@@ -14,6 +14,7 @@ main:
 	leaq fmt, %rdi
 	movq $0, %rax
 	call printf
+	movl $0, %eax
 	popq %rbp
 	ret
 	.data
