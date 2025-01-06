@@ -1,2 +1,11 @@
-row = [1, 2]
-print(row[0])
+# true
+print("" == "")
+print("" < "a")
+print("b" < "c")
+print("ab" >= "ab")
+print("" != "a")
+print("abc" == "abc")
+# false
+print("a" > "b")
+print("" > "b")
+print("abc" <= "ab")

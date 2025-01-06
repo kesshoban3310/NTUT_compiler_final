@@ -27,13 +27,22 @@ let rec compile_expr = function
   | TEbinop (op, lhs, rhs) ->
       (match lhs, rhs with
        | TEcst (Cstring s1), TEcst (Cstring s2) ->
-           let lbl1 = new_label () in
-           let lbl2 = new_label () in
-           string_constants := (lbl1, s1) :: (lbl2, s2) :: !string_constants;
-           leaq (lab lbl2) rsi ++
-           leaq (lab lbl1) rdi ++
-           movq (imm 0) !%rax ++
-           call "strcat"
+          (match op with
+            | Badd ->
+                let lbl1 = new_label () in
+                let lbl2 = new_label () in
+                string_constants := (lbl1, s1) :: (lbl2, s2) :: !string_constants;
+                leaq (lab lbl2) rsi ++
+                leaq (lab lbl1) rdi ++
+                movq (imm 0) !%rax ++
+                call "strcat"
+            | Beq -> movq (imm64 (if s1 = s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | Bneq -> movq (imm64 (if s1 <> s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | Blt -> movq (imm64 (if s1 < s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | Ble -> movq (imm64 (if s1 <= s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | Bgt -> movq (imm64 (if s1 > s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | Bge -> movq (imm64 (if s1 >= s2 then Int64.of_int 1 else Int64.of_int 0)) !%rax
+            | _ -> failwith "Type error: cannot perform operation on strings")
        | TEcst (Cint _), TEcst (Cstring _)
        | TEcst (Cstring _), TEcst (Cint _) ->
            failwith "Type error: cannot add integer and string"
