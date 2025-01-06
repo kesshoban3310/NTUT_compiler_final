@@ -4,11 +4,12 @@ main:
 main:
 	pushq %rbp
 	movq %rsp, %rbp
-	movq $1, %rax
+	movq $2, %rax
 	pushq %rax
-	leaq L0, %rax
+	movq $17, %rax
 	popq %rbx
-	addq %rbx, %rax
+	cqto
+	idivq %rbx
 	movq %rax, %rsi
 	leaq fmt_int, %rdi
 	movq $0, %rax
@@ -17,8 +18,6 @@ main:
 	popq %rbp
 	ret
 	.data
-L0:
-	.string "foo"
 fmt_int:
 	.string "%d\n"
 fmt_str:

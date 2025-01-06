@@ -39,13 +39,13 @@ let rec compile_expr = function
        | TEcst (Cstring _), TEcst (Cint _) ->
            failwith "Type error: cannot add integer and string"
        | _ ->
-           compile_expr lhs ++
-           pushq !%rax ++
            compile_expr rhs ++
+           pushq !%rax ++
+           compile_expr lhs ++
            popq rbx ++
            (match op with
             | Badd -> addq !%rbx !%rax
-            | Bsub -> subq !%rax !%rbx ++ movq !%rbx !%rax
+            | Bsub -> subq !%rbx !%rax
             | Bmul -> imulq !%rbx !%rax
             | Bdiv -> cqto ++ idivq !%rbx
             | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax

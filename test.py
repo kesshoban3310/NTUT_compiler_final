@@ -1,1 +1,1 @@
-print(1 + "foo")
+print(17//2)
