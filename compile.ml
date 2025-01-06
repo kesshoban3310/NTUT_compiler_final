@@ -65,7 +65,12 @@ let rec compile_stmt = function
       label end_label
   | TSreturn e -> compile_expr e ++ ret
   | TSassign (v, e) -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp)
-  | TSprint e -> compile_expr e ++ call "print_int"
+  | TSprint e -> 
+    compile_expr e ++
+    movq !%rax !%rsi ++
+    leaq (lab "fmt") rdi ++
+    movq (imm 0) !%rax ++
+    call "printf"
   | TSblock stmts -> List.fold_left (++) nop (List.map compile_stmt stmts)
   | TSfor _ -> failwith "For loops are not supported in code generation"
   | TSeval e -> compile_expr e
@@ -85,4 +90,6 @@ let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
       globl "main" ++ 
       label "main" ++ 
       List.fold_left (++) nop (List.map compile_def p);
-    data = nop; }
+    data = 
+      label "fmt" ++
+      string "%d\n" }

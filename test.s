@@ -5,7 +5,12 @@ main:
 	pushq %rbp
 	movq %rsp, %rbp
 	movq $123, %rax
-	call print_int
+	movq %rax, %rsi
+	leaq fmt, %rdi
+	movq $0, %rax
+	call printf
 	popq %rbp
 	ret
 	.data
+fmt:
+	.string "%d\n"
