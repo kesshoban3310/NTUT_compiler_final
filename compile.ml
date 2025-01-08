@@ -131,19 +131,21 @@ let rec compile_expr = function
   | TElist elements -> 
       let num_elements = List.length elements in
       let allocate_space = subq (imm (8 * num_elements)) !%rsp in
-      let deallocate_space = addq (imm (8 * num_elements)) !%rsp in
       let compile_element (code, offset) elem =
         code ++ compile_expr elem ++ movq !%rax (ind ~ofs:offset rbp), offset - 8
       in
-      let code, _ = List.fold_left compile_element (nop, -8) elements in
-      allocate_space ++ code ++ deallocate_space
+      let code, _ = List.fold_left compile_element (nop, !current_stack_offset - 8) elements in
+      current_stack_offset := !current_stack_offset - 8 * num_elements;
+      allocate_space ++ code ++
+      movq !%rbp !%rax ++ 
+      addq (imm (!current_stack_offset + 8 * num_elements)) !%rax
   | TErange _ -> failwith "Range is not supported in code generation"
   | TEget (list_expr, index_expr) ->
       compile_expr index_expr ++
       movq !%rax !%rbx ++  (* Save index in rbx *)
       addq (imm 1) !%rbx ++  (* Increment index by 1 *)
       compile_expr list_expr ++
-      movq !%rsp !%rcx ++  (* Save base address of list in rcx *)
+      movq !%rax !%rcx ++  (* Save base address of list in rcx *)
       imulq (imm 8) !%rbx ++  (* Multiply index by 8 (size of each element) *)
       subq !%rbx !%rcx ++  (* Add offset to base address *)
       movq (ind ~ofs:0 rcx) !%rax  (* Load the element into rax *)
@@ -169,17 +171,17 @@ let rec compile_stmt = function
       subq (imm 8) !%rsp ++
       (match e with
        | TEcst (Cstring s) ->
-           record_var_name v.v_name "string" stack_offset;
-           let lbl = new_label () in
-           string_constants := (lbl, s) :: !string_constants;
-           leaq (lab lbl) rax ++
-           movq !%rax (ind ~ofs:stack_offset rbp)
+            record_var_name v.v_name "string" stack_offset;
+            let lbl = new_label () in
+            string_constants := (lbl, s) :: !string_constants;
+            leaq (lab lbl) rax ++
+            movq !%rax (ind ~ofs:stack_offset rbp)
        | TEcst (Cint _) ->
-           record_var_name v.v_name "int" stack_offset;
-           compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+            record_var_name v.v_name "int" stack_offset;
+            compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
        | TEcst (Cbool _) ->
-           record_var_name v.v_name "bool" stack_offset;
-           compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+            record_var_name v.v_name "bool" stack_offset;
+            compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
        | TEbinop (_, TEvar (v1), TEvar (v2)) ->
             let current_var_table = Stack.top var_table_stack in
             (match Hashtbl.find_opt current_var_table v1.v_name, Hashtbl.find_opt current_var_table v2.v_name with
@@ -193,6 +195,9 @@ let rec compile_stmt = function
                 record_var_name v.v_name "string" stack_offset;
                 compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
               | _ -> failwith "Type error: cannot assign variables of different types")
+       | TElist _ ->
+            record_var_name v.v_name "list" stack_offset;
+            compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
        | _ -> failwith "Type error: cannot assign variable of type None")
   | TSprint e -> 
       (match e with
