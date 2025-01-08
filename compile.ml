@@ -236,7 +236,6 @@ let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
   debug := b;
   let text_section = 
     globl "main" ++ 
-    X86_64.label "main" ++ 
     List.fold_left (++) nop (List.map compile_def p) in
   let data_section = 
     List.fold_left (fun acc (lbl, str) -> acc ++ X86_64.label lbl ++ string str) nop !string_constants ++
