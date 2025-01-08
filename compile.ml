@@ -134,6 +134,7 @@ let rec compile_stmt = function
       (* Calculate the stack offset for the variable *)
       let stack_offset = calculate_stack_offset v in
       (* Record the variable name, type, and stack offset *)
+      subq (imm 8) !%rsp ++
       (match e with
        | TEcst (Cstring s) ->
            record_var_name v.v_name "string" stack_offset;
@@ -228,7 +229,7 @@ let compile_def (fn, body) =
   movq !%rsp !%rbp ++
   compile_stmt body ++
   movl (imm 0) !%eax ++
-  popq rbp ++
+  leave ++
   ret
 
 let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
