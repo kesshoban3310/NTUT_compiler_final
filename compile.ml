@@ -142,8 +142,9 @@ let rec compile_expr = function
   | TErange _ -> failwith "Range is not supported in code generation"
   | TEget (list_expr, index_expr) ->
       compile_expr index_expr ++
-      movq !%rax !%rbx ++  (* Save index in rbx *)
+      pushq !%rax ++  (* Save index on stack *)
       compile_expr list_expr ++
+      popq rbx ++  (* Restore index from stack *)
       movq !%rax !%rcx ++  (* Save base address of list in rcx *)
       imulq (imm 8) !%rbx ++  (* Multiply index by 8 (size of each element) *)
       subq !%rbx !%rcx ++  (* Add offset to base address *)
