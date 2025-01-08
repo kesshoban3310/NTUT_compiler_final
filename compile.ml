@@ -21,9 +21,34 @@ let compile_constant = function
   | Cstring s -> 1L
   | Cint i -> i
 
+(* Define a table to store variable names, their types, and stack offsets *)
+let var_table = Hashtbl.create 10
+
+(* Function to record variable name, type, and stack offset *)
+let record_var_name var_name var_type var_ofs =
+  Hashtbl.replace var_table var_name (var_type, var_ofs)
+
+(* Define a variable to keep track of the current stack offset *)
+let current_stack_offset = ref 0
+
+(* Function to calculate the stack offset for a variable *)
+let calculate_stack_offset var =
+  (* Assuming each variable occupies 8 bytes on the stack *)
+  let var_size = 8 in
+  (* Update the current stack offset *)
+  current_stack_offset := !current_stack_offset - var_size;
+  !current_stack_offset
+
+
 let rec compile_expr = function
   | TEcst c -> movq (imm64 (compile_constant c)) !%rax
-  | TEvar v -> movq (ind ~ofs:v.v_ofs rbp) !%rax
+  | TEvar v ->
+      (match Hashtbl.find_opt var_table v.v_name with
+       | Some (_, stack_offset) ->
+           (* Generate code to load the variable's value from the stack *)
+           movq (ind ~ofs:stack_offset rbp) !%rax
+       | None ->
+           failwith ("Variable " ^ v.v_name ^ " not found in symbol table"))
   | TEbinop (op, lhs, rhs) ->
       (match lhs, rhs with
        | TEcst (Cstring s1), TEcst (Cstring s2) ->
@@ -91,13 +116,7 @@ let rec compile_expr = function
       subq !%rbx !%rcx ++  (* Add offset to base address *)
       movq (ind ~ofs:0 rcx) !%rax  (* Load the element into rax *)
 
-(* Define a table to store variable names and their types *)
-let var_table = Hashtbl.create 10
-
-(* Function to record variable name and type *)
-let record_var_name var_name var_type =
-  Hashtbl.replace var_table var_name var_type
-
+(* Example of updating stack offset during variable assignment *)
 let rec compile_stmt = function
   | TSif (cond, then_branch, else_branch) ->
       let else_label = new_label () in
@@ -112,31 +131,40 @@ let rec compile_stmt = function
       X86_64.label end_label
   | TSreturn e -> compile_expr e ++ ret
   | TSassign (v, e) -> 
-      (* Record the variable name and type *)
+      (* Calculate the stack offset for the variable *)
+      let stack_offset = calculate_stack_offset v in
+      (* Record the variable name, type, and stack offset *)
       (match e with
        | TEcst (Cstring s) ->
-           record_var_name v.v_name "string";
+           record_var_name v.v_name "string" stack_offset;
            let lbl = new_label () in
            string_constants := (lbl, s) :: !string_constants;
            leaq (lab lbl) rax ++
-           movq !%rax (ind ~ofs:v.v_ofs rbp)
-       | _ -> compile_expr e ++ movq !%rax (ind ~ofs:v.v_ofs rbp))
+           movq !%rax (ind ~ofs:stack_offset rbp)
+       | TEcst (Cint _) ->
+           record_var_name v.v_name "int" stack_offset;
+           compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+       | TEcst (Cbool _) ->
+           record_var_name v.v_name "bool" stack_offset;
+           compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+       | _ -> compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp))
   | TSprint e -> 
       (match e with
        | TEvar v ->
            (match Hashtbl.find_opt var_table v.v_name with
-            | Some "string" ->
+            | Some ("string", _) ->
                 compile_expr e ++
                 movq !%rax !%rsi ++
                 leaq (lab "fmt_str") rdi ++
                 movq (imm 0) !%rax ++
                 call "printf"
-            | _ -> 
+            | Some ("int", _) | Some ("bool", _) ->
                 compile_expr e ++
                 movq !%rax !%rsi ++
                 leaq (lab "fmt_int") rdi ++
                 movq (imm 0) !%rax ++
-                call "printf")
+                call "printf"
+            | _ -> failwith "Type error: cannot print variable of type None")
        | TEbinop (Badd, TEcst (Cstring _), TEcst (Cstring _)) ->
            compile_expr e ++
            movq !%rax !%rsi ++
@@ -183,9 +211,16 @@ let rec compile_stmt = function
            movq (imm 0) !%rax ++
            call "printf")
   | TSblock stmts -> List.fold_left (++) nop (List.map compile_stmt stmts)
-  | TSfor _ -> failwith "For loops are not supported in code generation"
+  | TSfor (v, collection, body) ->
+      (* Record the loop variable name, type, and stack offset *)
+      record_var_name v.v_name "int" v.v_ofs; (* Assuming loop variable is an integer *)
+      compile_expr collection ++
+      compile_stmt body
   | TSeval e -> compile_expr e
-  | TSset _ -> failwith "Set is not supported in code generation"
+  | TSset (collection, index, value) ->
+      compile_expr collection ++
+      compile_expr index ++
+      compile_expr value
 
 let compile_def (fn, body) =
   X86_64.label fn.fn_name ++
