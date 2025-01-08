@@ -114,8 +114,6 @@ let rec compile_expr = function
   | TEunop (Uneg, e) -> compile_expr e ++ negq !%rax
   | TEunop (Unot, e) -> compile_expr e ++ notq !%rax
   | TEcall (fn, args) ->
-      (* Enter a new scope for the function call *)
-      (* enter_scope (); *)
       (* Calculate stack offsets for the function arguments *)
       let arg_offsets = List.mapi (fun i arg -> (arg, -8 * (i + 1))) args in
       (* Record the function arguments in the symbol table *)
@@ -129,8 +127,6 @@ let rec compile_expr = function
       let code = code ++ call fn.fn_name in
       (* Restore the stack pointer *)
       let code = code ++ addq (imm (8 * List.length args)) !%rsp in
-      (* Exit the scope *)
-      (* exit_scope (); *)
       code
   | TElist elements -> 
       let num_elements = List.length elements in
@@ -275,7 +271,7 @@ let rec compile_stmt = function
 
 let compile_def (fn, body) =
   enter_scope ();
-  let code = X86_64.label fn.fn_name ++
+  let code = 
   pushq !%rbp ++
   movq !%rsp !%rbp ++
   compile_stmt body ++
@@ -284,7 +280,7 @@ let compile_def (fn, body) =
   ret
   in
   exit_scope ();
-  code
+  label fn.fn_name++ code
 
 let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
   debug := b;
