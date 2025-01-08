@@ -21,15 +21,31 @@ let compile_constant = function
   | Cstring s -> 1L
   | Cint i -> i
 
-(* Define a table to store variable names, their types, and stack offsets *)
-let var_table = Hashtbl.create 10
+(* Define a stack to keep track of symbol tables for each scope *)
+let var_table_stack = Stack.create ()
 
 (* Function to record variable name, type, and stack offset *)
 let record_var_name var_name var_type var_ofs =
-  Hashtbl.replace var_table var_name (var_type, var_ofs)
+  let current_var_table = Stack.top var_table_stack in
+  Hashtbl.replace current_var_table var_name (var_type, var_ofs)
+
+(* Define a stack to keep track of stack offsets for each scope *)
+let stack_offset_stack = Stack.create ()
 
 (* Define a variable to keep track of the current stack offset *)
 let current_stack_offset = ref 0
+
+(* Function to enter a new scope *)
+let enter_scope () =
+  let new_var_table = Hashtbl.create 100 in
+  Stack.push new_var_table var_table_stack;
+  Stack.push !current_stack_offset stack_offset_stack;
+  current_stack_offset := 0
+
+(* Function to exit the current scope *)
+let exit_scope () =
+  ignore (Stack.pop var_table_stack);
+  current_stack_offset := Stack.pop stack_offset_stack
 
 (* Function to calculate the stack offset for a variable *)
 let calculate_stack_offset var =
@@ -43,7 +59,8 @@ let calculate_stack_offset var =
 let rec compile_expr = function
   | TEcst c -> movq (imm64 (compile_constant c)) !%rax
   | TEvar v ->
-      (match Hashtbl.find_opt var_table v.v_name with
+      let current_var_table = Stack.top var_table_stack in
+      (match Hashtbl.find_opt current_var_table v.v_name with
        | Some (_, stack_offset) ->
            (* Generate code to load the variable's value from the stack *)
            movq (ind ~ofs:stack_offset rbp) !%rax
@@ -93,9 +110,24 @@ let rec compile_expr = function
   | TEunop (Uneg, e) -> compile_expr e ++ negq !%rax
   | TEunop (Unot, e) -> compile_expr e ++ notq !%rax
   | TEcall (fn, args) ->
-      List.fold_right (fun arg code -> compile_expr arg ++ pushq !%rax ++ code) args nop ++
-      call fn.fn_name ++
-      addq (imm (8 * List.length args)) !%rsp
+      (* Enter a new scope for the function call *)
+      (* enter_scope (); *)
+      (* Calculate stack offsets for the function arguments *)
+      let arg_offsets = List.mapi (fun i arg -> (arg, -8 * (i + 1))) args in
+      (* Record the function arguments in the symbol table *)
+      List.iter (fun (arg, offset) ->
+        match arg with
+        | TEvar v -> record_var_name v.v_name "int" offset  (* Assuming all arguments are integers *)
+        | _ -> ()) arg_offsets;
+      (* Generate code to push the arguments onto the stack *)
+      let code = List.fold_right (fun (arg, _) code -> compile_expr arg ++ pushq !%rax ++ code) arg_offsets nop in
+      (* Call the function *)
+      let code = code ++ call fn.fn_name in
+      (* Restore the stack pointer *)
+      let code = code ++ addq (imm (8 * List.length args)) !%rsp in
+      (* Exit the scope *)
+      (* exit_scope (); *)
+      code
   | TElist elements -> 
       let num_elements = List.length elements in
       let allocate_space = subq (imm (8 * num_elements)) !%rsp in
@@ -152,7 +184,8 @@ let rec compile_stmt = function
   | TSprint e -> 
       (match e with
        | TEvar v ->
-           (match Hashtbl.find_opt var_table v.v_name with
+            let current_var_table = Stack.top var_table_stack in
+           (match Hashtbl.find_opt current_var_table v.v_name with
             | Some ("string", _) ->
                 compile_expr e ++
                 movq !%rax !%rsi ++
@@ -224,13 +257,17 @@ let rec compile_stmt = function
       compile_expr value
 
 let compile_def (fn, body) =
-  X86_64.label fn.fn_name ++
+  enter_scope ();
+  let code = X86_64.label fn.fn_name ++
   pushq !%rbp ++
   movq !%rsp !%rbp ++
   compile_stmt body ++
   movl (imm 0) !%eax ++
   leave ++
   ret
+  in
+  exit_scope ();
+  code
 
 let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
   debug := b;
