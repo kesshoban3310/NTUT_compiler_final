@@ -1,2 +1,3 @@
-x = [1, [1,2], 3]
-print(x[1][1])
+def foo():
+    return "123"
+print(foo())

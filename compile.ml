@@ -203,7 +203,14 @@ let rec compile_stmt = function
       X86_64.label else_label ++
       compile_stmt else_branch ++
       X86_64.label end_label
-  | TSreturn e -> compile_expr e ++ ret
+  | TSreturn e ->
+        (match e with
+          | TEcst (Cstring s) -> 
+              let lbl = new_label () in
+              string_constants := (lbl, s) :: !string_constants;
+              leaq (lab lbl) rax 
+          | _ -> compile_expr e
+        )
   | TSassign (v, e) -> 
       (* Calculate the stack offset for the variable *)
       let stack_offset = calculate_stack_offset v in
@@ -296,6 +303,12 @@ let rec compile_stmt = function
            leaq (lab "false_str") rdi ++
            movq (imm 0) !%rax ++
            call "printf"
+       | TEcst (Cnone) ->
+          leaq (lab "none_str") rdi ++
+          movq (imm 0) !%rax ++
+          call "printf"
+       | TEcall (fn, _) ->
+           failwith "Type error: cannot print function call"
        | _ ->
            compile_expr e ++
            movq !%rax !%rsi ++
@@ -320,7 +333,10 @@ let compile_def (fn, body) =
   pushq !%rbp ++
   movq !%rsp !%rbp ++
   compile_stmt body ++
-  movl (imm 0) !%eax ++
+  if fn.fn_name = "main" then
+    movq (imm 0) !%rax
+  else
+    nop ++
   leave ++
   ret
   in
@@ -341,6 +357,8 @@ let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
     X86_64.label "true_str" ++
     string "True\n" ++
     X86_64.label "false_str" ++
-    string "False\n"
+    string "False\n" ++
+    X86_64.label "none_str" ++
+    string "None\n"
     in
   { text = text_section; data = data_section }
