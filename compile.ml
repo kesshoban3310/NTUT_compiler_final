@@ -138,12 +138,11 @@ let rec compile_expr = function
       current_stack_offset := !current_stack_offset - 8 * num_elements;
       allocate_space ++ code ++
       movq !%rbp !%rax ++ 
-      addq (imm (!current_stack_offset + 8 * num_elements)) !%rax
+      addq (imm (!current_stack_offset + 8 * (num_elements - 1))) !%rax
   | TErange _ -> failwith "Range is not supported in code generation"
   | TEget (list_expr, index_expr) ->
       compile_expr index_expr ++
       movq !%rax !%rbx ++  (* Save index in rbx *)
-      addq (imm 1) !%rbx ++  (* Increment index by 1 *)
       compile_expr list_expr ++
       movq !%rax !%rcx ++  (* Save base address of list in rcx *)
       imulq (imm 8) !%rbx ++  (* Multiply index by 8 (size of each element) *)
