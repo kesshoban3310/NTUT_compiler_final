@@ -171,8 +171,8 @@ let rec compile_expr = function
         code ++ compile_expr elem ++ movq !%rax (ind ~ofs:offset rbp), offset - 8
       in
       let ptr = !current_stack_offset in
-      let code, _ = List.fold_left compile_element (nop, ptr - 16) elements in
       current_stack_offset := ptr - 8 * (num_elements + 1);
+      let code, _ = List.fold_left compile_element (nop, ptr - 16) elements in
       allocate_space ++ 
       movq (imm (num_elements)) (ind ~ofs:(ptr-8) rbp) ++
       code ++
