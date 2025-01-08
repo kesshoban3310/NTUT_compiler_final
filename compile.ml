@@ -114,20 +114,26 @@ let rec compile_expr = function
   | TEunop (Uneg, e) -> compile_expr e ++ negq !%rax
   | TEunop (Unot, e) -> compile_expr e ++ notq !%rax
   | TEcall (fn, args) ->
-      (* Calculate stack offsets for the function arguments *)
-      let arg_offsets = List.mapi (fun i arg -> (arg, -8 * (i + 1))) args in
-      (* Record the function arguments in the symbol table *)
-      List.iter (fun (arg, offset) ->
-        match arg with
-        | TEvar v -> record_var_name v.v_name "int" offset  (* Assuming all arguments are integers *)
-        | _ -> ()) arg_offsets;
-      (* Generate code to push the arguments onto the stack *)
-      let code = List.fold_right (fun (arg, _) code -> compile_expr arg ++ pushq !%rax ++ code) arg_offsets nop in
-      (* Call the function *)
-      let code = code ++ call fn.fn_name in
-      (* Restore the stack pointer *)
-      let code = code ++ addq (imm (8 * List.length args)) !%rsp in
-      code
+      (match fn.fn_name with
+      | "len" ->
+          compile_expr (List.hd args) ++
+          movq (ind ~ofs:0 rax) !%rax
+      | _ ->
+        (* Calculate stack offsets for the function arguments *)
+        let arg_offsets = List.mapi (fun i arg -> (arg, -8 * (i + 1))) args in
+        (* Record the function arguments in the symbol table *)
+        List.iter (fun (arg, offset) ->
+          match arg with
+          | TEvar v -> record_var_name v.v_name "int" offset  (* Assuming all arguments are integers *)
+          | _ -> ()) arg_offsets;
+        (* Generate code to push the arguments onto the stack *)
+        let code = List.fold_right (fun (arg, _) code -> compile_expr arg ++ pushq !%rax ++ code) arg_offsets nop in
+        (* Call the function *)
+        let code = code ++ call fn.fn_name in
+        (* Restore the stack pointer *)
+        let code = code ++ addq (imm (8 * List.length args)) !%rsp in
+        code
+      )
   | TElist elements -> 
       let num_elements = List.length elements in
       let allocate_space = subq (imm (8 * (num_elements + 1))) !%rsp in
