@@ -49,11 +49,15 @@ let exit_scope () =
 
 (* Function to calculate the stack offset for a variable *)
 let calculate_stack_offset var =
-  (* Assuming each variable occupies 8 bytes on the stack *)
-  let var_size = 8 in
-  (* Update the current stack offset *)
-  current_stack_offset := !current_stack_offset - var_size;
-  !current_stack_offset
+  let current_var_table = Stack.top var_table_stack in
+  match Hashtbl.find_opt current_var_table var.v_name with
+  | Some (_, existing_offset) -> existing_offset
+  | None ->
+      (* Assuming each variable occupies 8 bytes on the stack *)
+      let var_size = 8 in
+      (* Update the current stack offset *)
+      current_stack_offset := !current_stack_offset - var_size;
+      !current_stack_offset
 
 
 let rec compile_expr = function
