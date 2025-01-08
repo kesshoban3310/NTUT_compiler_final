@@ -1,24 +1,22 @@
 	.text
 	.globl	main
-foo:
-	pushq %rbp
-	movq %rsp, %rbp
-	leaq L0, %rax
-	leave
-	ret
 main:
 	pushq %rbp
 	movq %rsp, %rbp
-	call foo
-	addq $0, %rsp
+	subq $8, %rsp
+	leaq L0, %rax
+	movq %rax, -8(%rbp)
+	movq -8(%rbp), %rax
 	movq %rax, %rsi
-	leaq fmt_int, %rdi
+	leaq fmt_str, %rdi
 	movq $0, %rax
 	call printf
 	movq $0, %rax
+	leave
+	ret
 	.data
 L0:
-	.string "123"
+	.string "foo"
 fmt_int:
 	.string "%d\n"
 fmt_str:

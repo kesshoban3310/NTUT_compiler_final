@@ -59,6 +59,16 @@ let calculate_stack_offset var =
       current_stack_offset := !current_stack_offset - var_size;
       !current_stack_offset
 
+(* Define a hash table to store function names and their return types *)
+let function_return_types = Hashtbl.create 100
+
+(* Initialize the hash table with known functions and their return types *)
+let initialize_function_return_types () =
+  Hashtbl.add function_return_types "len" "int";
+  (* Add other functions and their return types here *)
+  ()
+
+let current_fn_name = ref "main"
 
 let rec compile_expr = function
   | TEcst c -> movq (imm64 (compile_constant c)) !%rax
@@ -206,9 +216,19 @@ let rec compile_stmt = function
   | TSreturn e ->
         (match e with
           | TEcst (Cstring s) -> 
+              Hashtbl.add function_return_types !current_fn_name "string";
               let lbl = new_label () in
               string_constants := (lbl, s) :: !string_constants;
               leaq (lab lbl) rax 
+          | TEcst (Cint _) ->
+              Hashtbl.add function_return_types !current_fn_name "int";
+              compile_expr e
+          | TEcst (Cbool _) ->
+              Hashtbl.add function_return_types !current_fn_name "bool";
+              compile_expr e
+          | TEcst (Cnone) ->
+              Hashtbl.add function_return_types !current_fn_name "none";
+              movq (imm 0) !%rax
           | _ -> compile_expr e
         )
   | TSassign (v, e) -> 
@@ -308,7 +328,38 @@ let rec compile_stmt = function
           movq (imm 0) !%rax ++
           call "printf"
        | TEcall (fn, _) ->
-           failwith "Type error: cannot print function call"
+           (match Hashtbl.find_opt function_return_types fn.fn_name with
+            | Some "string" ->
+                compile_expr e ++
+                movq !%rax !%rsi ++
+                leaq (lab "fmt_str") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf"
+            | Some "int" ->
+                compile_expr e ++
+                movq !%rax !%rsi ++
+                leaq (lab "fmt_int") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf"
+            | Some "bool" ->
+                let false_label = new_label () in
+                let end_label = new_label () in
+                compile_expr e ++
+                testq !%rax !%rax ++
+                jz false_label ++
+                leaq (lab "true_str") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf" ++
+                jmp end_label ++
+                X86_64.label false_label ++
+                leaq (lab "false_str") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf" ++
+                X86_64.label end_label
+            | _ ->
+                leaq (lab "none_str") rdi ++
+                movq (imm 0) !%rax ++
+                call "printf")
        | _ ->
            compile_expr e ++
            movq !%rax !%rsi ++
@@ -329,19 +380,20 @@ let rec compile_stmt = function
 
 let compile_def (fn, body) =
   enter_scope ();
+  current_fn_name := fn.fn_name;
   let code = 
-  pushq !%rbp ++
-  movq !%rsp !%rbp ++
-  compile_stmt body ++
-  if fn.fn_name = "main" then
-    movq (imm 0) !%rax
-  else
-    nop ++
-  leave ++
-  ret
+    pushq !%rbp ++
+    movq !%rsp !%rbp ++
+    compile_stmt body ++
+    (if fn.fn_name = "main" then
+      movq (imm 0) !%rax
+    else
+      nop) ++
+    leave ++
+    ret
   in
   exit_scope ();
-  label fn.fn_name++ code
+  label fn.fn_name ++ code
 
 let file ?debug:(b=false) (p: Ast.tfile) : X86_64.program =
   debug := b;
