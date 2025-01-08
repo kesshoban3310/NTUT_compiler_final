@@ -184,7 +184,20 @@ let rec compile_stmt = function
        | TEcst (Cbool _) ->
            record_var_name v.v_name "bool" stack_offset;
            compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
-       | _ -> compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp))
+       | TEbinop (_, TEvar (v1), TEvar (v2)) ->
+            let current_var_table = Stack.top var_table_stack in
+            (match Hashtbl.find_opt current_var_table v1.v_name, Hashtbl.find_opt current_var_table v2.v_name with
+              | Some ("int", _), Some ("int", _) ->
+                  record_var_name v.v_name "int" stack_offset;
+                  compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+              | Some ("bool", _), Some ("bool", _) ->
+                record_var_name v.v_name "bool" stack_offset;
+                compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+              | Some ("string", _), Some ("string", _) ->
+                record_var_name v.v_name "string" stack_offset;
+                compile_expr e ++ movq !%rax (ind ~ofs:stack_offset rbp)
+              | _ -> failwith "Type error: cannot assign variables of different types")
+       | _ -> failwith "Type error: cannot assign variable of type None")
   | TSprint e -> 
       (match e with
        | TEvar v ->
