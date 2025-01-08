@@ -130,18 +130,22 @@ let rec compile_expr = function
       code
   | TElist elements -> 
       let num_elements = List.length elements in
-      let allocate_space = subq (imm (8 * num_elements)) !%rsp in
+      let allocate_space = subq (imm (8 * (num_elements + 1))) !%rsp in
       let compile_element (code, offset) elem =
         code ++ compile_expr elem ++ movq !%rax (ind ~ofs:offset rbp), offset - 8
       in
-      let code, _ = List.fold_left compile_element (nop, !current_stack_offset - 8) elements in
-      current_stack_offset := !current_stack_offset - 8 * num_elements;
-      allocate_space ++ code ++
+      let ptr = !current_stack_offset in
+      let code, _ = List.fold_left compile_element (nop, ptr - 16) elements in
+      current_stack_offset := ptr - 8 * (num_elements + 1);
+      allocate_space ++ 
+      movq (imm (num_elements)) (ind ~ofs:(ptr-8) rbp) ++
+      code ++
       movq !%rbp !%rax ++ 
-      addq (imm (!current_stack_offset + 8 * (num_elements - 1))) !%rax
+      addq (imm (ptr - 8)) !%rax
   | TErange _ -> failwith "Range is not supported in code generation"
   | TEget (list_expr, index_expr) ->
       compile_expr index_expr ++
+      addq (imm 1) !%rax ++  (* Increment index by 1 to account for the length field *)
       pushq !%rax ++  (* Save index on stack *)
       compile_expr list_expr ++
       popq rbx ++  (* Restore index from stack *)
