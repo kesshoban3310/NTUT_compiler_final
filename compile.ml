@@ -93,24 +93,54 @@ let rec compile_expr = function
        | TEcst (Cstring _), TEcst (Cint _) ->
            failwith "Type error: cannot add integer and string"
        | _ ->
-           compile_expr rhs ++
-           pushq !%rax ++
-           compile_expr lhs ++
-           popq rbx ++
            (match op with
-            | Badd -> addq !%rbx !%rax
-            | Bsub -> subq !%rbx !%rax
-            | Bmul -> imulq !%rbx !%rax
-            | Bdiv -> cqto ++ idivq !%rbx
-            | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax
-            | Beq -> cmpq !%rbx !%rax ++ sete !%al ++ movzbq !%al rax
-            | Bneq -> cmpq !%rbx !%rax ++ setne !%al ++ movzbq !%al rax
-            | Blt -> cmpq !%rbx !%rax ++ setl !%al ++ movzbq !%al rax
-            | Ble -> cmpq !%rbx !%rax ++ setle !%al ++ movzbq !%al rax
-            | Bgt -> cmpq !%rbx !%rax ++ setg !%al ++ movzbq !%al rax
-            | Bge -> cmpq !%rbx !%rax ++ setge !%al ++ movzbq !%al rax
-            | Band -> andq !%rbx !%rax
-            | Bor -> orq !%rbx !%rax))
+            | Band -> 
+              let false_label = new_label () in
+              let end_label = new_label () in
+              compile_expr lhs ++
+              testq !%rax !%rax ++
+              jz false_label ++
+              compile_expr rhs ++
+              testq !%rax !%rax ++
+              jz false_label ++
+              movq (imm 1) !%rax ++
+              jmp end_label ++
+              label false_label ++
+              movq (imm 0) !%rax ++
+              label end_label
+            | Bor -> 
+              let true_label = new_label () in
+              let end_label = new_label () in
+              compile_expr lhs ++
+              testq !%rax !%rax ++
+              jnz true_label ++
+              compile_expr rhs ++
+              testq !%rax !%rax ++
+              jnz true_label ++
+              movq (imm 0) !%rax ++
+              jmp end_label ++
+              label true_label ++
+              movq (imm 1) !%rax ++
+              label end_label
+            | _ -> (
+              compile_expr rhs ++
+              pushq !%rax ++
+              compile_expr lhs ++
+              popq rbx ++ 
+              match op with
+                | Badd -> addq !%rbx !%rax
+                | Bsub -> subq !%rbx !%rax
+                | Bmul -> imulq !%rbx !%rax
+                | Bdiv -> cqto ++ idivq !%rbx
+                | Bmod -> cqto ++ idivq !%rbx ++ movq !%rdx !%rax
+                | Beq -> cmpq !%rbx !%rax ++ sete !%al ++ movzbq !%al rax
+                | Bneq -> cmpq !%rbx !%rax ++ setne !%al ++ movzbq !%al rax
+                | Blt -> cmpq !%rbx !%rax ++ setl !%al ++ movzbq !%al rax
+                | Ble -> cmpq !%rbx !%rax ++ setle !%al ++ movzbq !%al rax
+                | Bgt -> cmpq !%rbx !%rax ++ setg !%al ++ movzbq !%al rax
+                | Bge -> cmpq !%rbx !%rax ++ setge !%al ++ movzbq !%al rax
+                | _ -> failwith "Type error: cannot perform operation on strings"
+              )))
   | TEunop (Uneg, e) -> compile_expr e ++ negq !%rax
   | TEunop (Unot, e) -> compile_expr e ++ notq !%rax
   | TEcall (fn, args) ->
